@@ -1,0 +1,1917 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GEBCO Scholar Story Map</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700;900&family=DM+Sans:wght@300;400;500&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --ocean-deep: #050d1a;
+    --ocean-mid: #071628;
+    --ocean-surface: #0a2040;
+    --teal-bright: #00d4c8;
+    --teal-mid: #00a89e;
+    --teal-dim: #005a55;
+    --amber: #f5a623;
+    --coral: #ff6b5b;
+    --text-primary: #e8f4f8;
+    --text-secondary: #7bb8cc;
+    --text-muted: #3d6f82;
+    --panel-bg: rgba(5, 13, 26, 0.92);
+    --glass: rgba(0, 212, 200, 0.05);
+    --border: rgba(0, 212, 200, 0.15);
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'DM Sans', sans-serif;
+    background: var(--ocean-deep);
+    color: var(--text-primary);
+    height: 100vh;
+    overflow: hidden;
+  }
+
+  /* ── MAP ── */
+  #map {
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+  }
+
+  /* Override Leaflet tiles for dark look */
+  .leaflet-tile { filter: brightness(0.35) saturate(0.4) hue-rotate(190deg); }
+
+  /* ── HEADER ── */
+  #header {
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    z-index: 1000;
+    padding: 18px 28px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: linear-gradient(to bottom, rgba(5,13,26,0.97) 60%, transparent);
+    pointer-events: none;
+  }
+
+  .logo-area { display: flex; align-items: center; gap: 14px; }
+  .logo-dot {
+    width: 38px; height: 38px;
+    border-radius: 50%;
+    background: conic-gradient(var(--teal-bright), var(--teal-mid), var(--ocean-deep), var(--teal-bright));
+    animation: spin 12s linear infinite;
+    flex-shrink: 0;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .logo-text h1 {
+    font-family: 'Playfair Display', serif;
+    font-size: 1.25rem;
+    font-weight: 900;
+    letter-spacing: 0.02em;
+    color: var(--teal-bright);
+    line-height: 1;
+  }
+  .logo-text p {
+    font-size: 0.68rem;
+    color: var(--text-secondary);
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    margin-top: 2px;
+  }
+  .header-stats {
+    display: flex;
+    gap: 24px;
+    pointer-events: none;
+  }
+  .stat {
+    text-align: right;
+  }
+  .stat-num {
+    font-family: 'DM Mono', monospace;
+    font-size: 1.4rem;
+    color: var(--teal-bright);
+    line-height: 1;
+  }
+  .stat-label {
+    font-size: 0.62rem;
+    color: var(--text-muted);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
+
+  /* ── TIMELINE PANEL (bottom) ── */
+  #timeline-panel {
+    position: absolute;
+    bottom: 0; left: 0; right: 0;
+    z-index: 1000;
+    padding: 16px 32px 20px;
+    background: linear-gradient(to top, rgba(5,13,26,0.97) 70%, transparent);
+  }
+  .timeline-label {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+  }
+  .timeline-label span {
+    font-size: 0.7rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--text-secondary);
+  }
+  .year-display {
+    font-family: 'Playfair Display', serif;
+    font-size: 1.1rem;
+    color: var(--teal-bright);
+    font-weight: 700;
+  }
+  .timeline-track {
+    position: relative;
+    height: 36px;
+    display: flex;
+    align-items: center;
+    gap: 0;
+  }
+
+  /* Year tick marks */
+  .year-ticks {
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 100%;
+    display: flex;
+    justify-content: space-between;
+    pointer-events: none;
+    z-index: 1;
+  }
+  .tick {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 3px;
+    cursor: pointer;
+    pointer-events: all;
+    transition: opacity 0.2s;
+  }
+  .tick-line {
+    width: 1px;
+    height: 10px;
+    background: var(--border);
+    transition: background 0.2s, height 0.2s;
+  }
+  .tick.active .tick-line { background: var(--teal-bright); height: 14px; }
+  .tick-year {
+    font-family: 'DM Mono', monospace;
+    font-size: 0.7rem !important;
+    color: var(--text-muted);
+    transition: color 0.2s;
+    white-space: nowrap;
+  }
+  .tick.active .tick-year { color: var(--teal-bright); }
+
+  /* ── LEFT SIDE PANEL ── */
+  #side-panel {
+    position: absolute;
+    top: 100px;
+    left: 0;
+    width: 320px;
+    height: max-content;
+    bottom: 100px;
+    z-index: 1000;
+    display: flex;
+    flex-direction: column;
+    padding: 0 0 0 18px;
+    pointer-events: none;
+  }
+  .side-card {
+    background: var(--panel-bg);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px;
+    backdrop-filter: blur(12px);
+    pointer-events: all;
+  }
+  .side-card h2 {
+    font-family: 'Playfair Display', serif;
+    font-size: 0.95rem;
+    font-weight: 700;
+    color: var(--teal-bright);
+    letter-spacing: 0.04em;
+    margin-bottom: 12px;
+    text-transform: uppercase;
+  }
+  .cohort-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    max-height: 300px;
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: var(--teal-dim) transparent;
+  }
+  .cohort-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 7px 10px;
+    border-radius: 7px;
+    cursor: pointer;
+    transition: background 0.2s;
+    border: 1px solid transparent;
+  }
+  .cohort-item:hover { background: var(--glass); border-color: var(--border); }
+  .cohort-item.active { background: rgba(0,212,200,0.08); border-color: var(--teal-dim); }
+  .cohort-dot {
+    width: 10px; height: 10px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+  .cohort-item-text { flex: 1; }
+  .cohort-year-label {
+    font-family: 'DM Mono', monospace;
+    font-size: 0.72rem;
+    color: var(--text-secondary);
+  }
+  .cohort-count {
+    font-size: 0.65rem;
+    color: var(--text-muted);
+  }
+  .cohort-badge {
+    font-family: 'DM Mono', monospace;
+    font-size: 0.65rem;
+    color: var(--teal-mid);
+    background: rgba(0,212,200,0.08);
+    padding: 2px 7px;
+    border-radius: 20px;
+  }
+
+  /* ── SCHOLAR POPUP CARD ── */
+  #scholar-popup {
+    position: absolute;
+    top: 90px;
+    right: 18px;
+    width: 300px;
+    z-index: 2000;
+    display: none;
+    animation: slideIn 0.25s ease;
+  }
+  @keyframes slideIn {
+    from { opacity: 0; transform: translateX(20px); }
+    to { opacity: 1; transform: translateX(0); }
+  }
+  .popup-card {
+    background: var(--panel-bg);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    overflow: hidden;
+    backdrop-filter: blur(16px);
+    box-shadow: 0 20px 60px rgba(0,0,0,0.6), 0 0 30px rgba(0,212,200,0.05);
+  }
+  .popup-header {
+    background: linear-gradient(135deg, var(--teal-dim), var(--ocean-surface));
+    padding: 18px 20px 14px;
+    position: relative;
+  }
+  .popup-flag {
+    font-size: 2rem;
+    line-height: 1;
+    margin-bottom: 6px;
+  }
+  .popup-name {
+    font-family: 'Playfair Display', serif;
+    font-size: 1.05rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    line-height: 1.2;
+  }
+  .popup-country {
+    font-size: 0.72rem;
+    color: var(--teal-bright);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    margin-top: 3px;
+  }
+  .popup-close {
+    position: absolute;
+    top: 14px; right: 14px;
+    width: 26px; height: 26px;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.08);
+    border: none;
+    color: var(--text-secondary);
+    cursor: pointer;
+    font-size: 0.85rem;
+    display: flex; align-items: center; justify-content: center;
+    transition: background 0.2s;
+  }
+  .popup-close:hover { background: rgba(255,255,255,0.15); }
+  .popup-body { padding: 16px 20px; }
+  .popup-cohort-badge {
+    display: inline-block;
+    font-family: 'DM Mono', monospace;
+    font-size: 0.65rem;
+    background: rgba(0,212,200,0.1);
+    border: 1px solid var(--teal-dim);
+    color: var(--teal-bright);
+    padding: 3px 10px;
+    border-radius: 20px;
+    letter-spacing: 0.08em;
+    margin-bottom: 12px;
+  }
+  .popup-bio {
+    font-size: 0.8rem;
+    line-height: 1.6;
+    color: var(--text-secondary);
+    margin-bottom: 14px;
+  }
+  .popup-now {
+    border-top: 1px solid var(--border);
+    padding-top: 12px;
+  }
+  .popup-now-label {
+    font-size: 0.62rem;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--text-muted);
+    margin-bottom: 5px;
+  }
+  .popup-now-text {
+    font-size: 0.8rem;
+    color: var(--text-primary);
+    font-weight: 500;
+  }
+
+  /* ── GENDER STATS PANEL ── */
+  #gender-panel {
+  margin-bottom: 10px;
+  }
+  .gender-header {
+    font-size: 0.65rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin-bottom: 8px;
+  }
+  .gender-stats {
+    display: flex;
+    justify-content: space-between;
+  }
+  .gender-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-family: 'DM Mono', monospace;
+    font-size: 0.8rem;
+  }
+  .gender-item-h1 {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-family: 'DM Mono', monospace;
+    font-size: 0.8rem;
+    color: var(--teal-mid);
+  }
+  .gender-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+  }
+  .gender-item.female .gender-dot {
+    background: #00d4c8;
+  }
+  .gender-item.male .gender-dot {
+    background: #f5a623;
+  }
+  .gender-bar-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  }
+  .gender-pct-left,
+  .gender-pct-right {
+    font-size: 0.7rem;
+    font-family: 'DM Mono', monospace;
+    color: var(--text-muted);
+    width: 32px;
+  }
+  .gender-pct-left {
+    text-align: left;
+  }
+  .gender-pct-right {
+    text-align: right;
+  }
+  .gender-bar {
+    flex: 1;
+    height: 10px;
+    display: flex;
+    overflow: hidden;
+    border-radius: 999px;
+    background: rgba(255,255,255,0.06);
+    border: 1px solid var(--border);
+  }
+  .gender-bar-female {
+    background: #00d4c8;
+    height: 100%;
+    transition: width 0.35s ease;
+  }
+  .gender-bar-male {
+    background: #f5a623;
+    height: 100%;
+    transition: width 0.35s ease;
+  }
+
+  /* ── COUNTRY STATS PANEL ── */
+  #country-panel {
+    position: absolute;
+    top: 50px;
+    right: 18px;
+    width: 220px;
+    z-index: 1000;
+    display: none;
+  }
+  #country-panel .side-card { max-height: calc(100dvh - var(--header-h) - var(--bottom-h) - 200px); overflow: hidden; display: flex; flex-direction: column; }
+  .country-list {
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: var(--teal-dim) transparent;
+    flex: 1;
+  }
+  .country-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 5px 6px;
+    border-radius: 5px;
+    transition: background 0.15s;
+  }
+  .country-row:hover { background: var(--glass); }
+  .country-flag { font-size: 1rem; flex-shrink: 0; }
+  .country-name { font-size: 0.72rem; color: var(--text-secondary); flex: 1; }
+  .country-count {
+    font-family: 'DM Mono', monospace;
+    font-size: 0.68rem;
+    color: var(--teal-bright);
+    background: rgba(0,212,200,0.08);
+    padding: 1px 6px;
+    border-radius: 10px;
+    min-width: 22px;
+    text-align: center;
+  }
+  .country-panel-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+  }
+  .country-panel-header h2 { margin-bottom: 0; }
+  .country-panel-sub {
+    font-size: 0.62rem;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+
+  /* ── INTRO OVERLAY ── */
+  #intro {
+    position: absolute;
+    inset: 0;
+    z-index: 3000;
+    background: var(--ocean-deep);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    gap: 20px;
+    transition: opacity 0.8s ease;
+  }
+  #intro.fade-out { opacity: 0; pointer-events: none; }
+
+  .intro-title {
+    font-family: 'Playfair Display', serif;
+    font-size: clamp(2.2rem, 5vw, 4rem);
+    font-weight: 900;
+    text-align: center;
+    line-height: 1.1;
+    color: var(--text-primary);
+    max-width: 700px;
+  }
+  .intro-title span { color: var(--teal-bright); }
+
+  .intro-sub {
+    font-size: 0.9rem;
+    color: var(--text-secondary);
+    text-align: center;
+    max-width: 480px;
+    line-height: 1.7;
+    letter-spacing: 0.01em;
+  }
+
+  .intro-divider {
+    width: 60px; height: 1px;
+    background: linear-gradient(to right, transparent, var(--teal-bright), transparent);
+  }
+
+  .intro-stats {
+    display: flex;
+    gap: 48px;
+    margin: 10px 0;
+  }
+  .intro-stat { text-align: center; }
+  .intro-stat-num {
+    font-family: 'Playfair Display', serif;
+    font-size: 2.2rem;
+    font-weight: 900;
+    color: var(--teal-bright);
+    line-height: 1;
+  }
+  .intro-stat-label {
+    font-size: 0.68rem;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    margin-top: 4px;
+  }
+
+  .btn-enter {
+    margin-top: 8px;
+    padding: 14px 40px;
+    background: transparent;
+    border: 1px solid var(--teal-bright);
+    color: var(--teal-bright);
+    font-family: 'DM Sans', sans-serif;
+    font-size: 0.82rem;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.25s;
+    position: relative;
+    overflow: hidden;
+  }
+  .btn-enter::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: var(--teal-bright);
+    transform: scaleX(0);
+    transform-origin: left;
+    transition: transform 0.25s;
+    z-index: -1;
+  }
+  .btn-enter:hover::before { transform: scaleX(1); }
+  .btn-enter:hover { color: var(--ocean-deep); }
+
+  /* ocean ripple bg on intro */
+  .ocean-bg {
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(ellipse at 50% 100%, rgba(0,168,158,0.12) 0%, transparent 60%),
+                radial-gradient(ellipse at 20% 50%, rgba(0,212,200,0.05) 0%, transparent 50%);
+    pointer-events: none;
+  }
+
+  /* Custom Leaflet marker */
+  .scholar-marker {
+    width: 14px; height: 14px;
+    border-radius: 50%;
+    border: 2px solid rgba(255,255,255,0.3);
+    cursor: pointer;
+    transition: transform 0.2s, box-shadow 0.2s;
+    animation: pulse-marker 2.5s ease-in-out infinite;
+  }
+  .scholar-marker:hover {
+    transform: scale(1.5);
+    box-shadow: 0 0 20px currentColor;
+  }
+  @keyframes pulse-marker {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.7; }
+  }
+
+  .map-attribution-custom {
+    position: absolute;
+    bottom: 100px;
+    left: 18px;
+    z-index: 999;
+    font-size: 0.6rem;
+    color: var(--text-muted);
+    pointer-events: none;
+  }
+
+  /* scroll hint */
+  .scroll-hint {
+    position: absolute;
+    bottom: 8px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 0.6rem;
+    color: var(--text-muted);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    pointer-events: none;
+    white-space: nowrap;
+  }
+
+  /* Cluster badge */
+  /* Cluster dot — same size/style as single scholar dot, pie-chart gender split */
+  .cluster-dot {
+    width: 14px; height: 14px;
+    border-radius: 50%;
+    border: 2px solid rgba(255,255,255,0.3);
+    cursor: pointer;
+    transition: transform 0.2s, box-shadow 0.2s;
+    animation: pulse-marker 2.5s ease-in-out infinite;
+  }
+  .cluster-dot:hover {
+    transform: scale(1.5);
+  }
+  .country-tooltip {
+    background: rgba(5,13,26,0.92) !important;
+    border: 1px solid rgba(0,212,200,0.3) !important;
+    color: #e8f4f8 !important;
+    font-family: 'DM Sans', sans-serif !important;
+    font-size: 0.75rem !important;
+    border-radius: 6px !important;
+    padding: 6px 10px !important;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.5) !important;
+  }
+  .country-tooltip::before { display:none !important; }
+  .leaflet-popup-content-wrapper {
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+    padding: 0 !important;
+  }
+  .leaflet-popup-tip { display: none; }
+  .leaflet-popup-content { margin: 0 !important; }
+
+  /* ── RESPONSIVE OVERRIDES ── */
+  :root {
+    --header-h: 90px;
+    --bottom-h: 110px;
+    --side-w: 260px;
+    --safe-bottom: env(safe-area-inset-bottom, 0px);
+  }
+
+  * { -webkit-tap-highlight-color: transparent; }
+
+  body { height: 100dvh; touch-action: none; }
+  #map { touch-action: pan-x pan-y; }
+  .leaflet-control-zoom { left: 12px; margin-bottom: calc(var(--bottom-h)) !important; opacity: 60%; }
+
+  /* Header responsive */
+  #header {
+    height: var(--header-h);
+    padding: 0 16px;
+    align-items: center;
+    gap: 10px;
+  }
+  .logo-dot { width: 28px; height: 28px; }
+  .logo-text h1 { font-size: clamp(0.78rem, 2.5vw, 1.1rem); white-space: nowrap; }
+  .logo-text p { font-size: 0.56rem; white-space: nowrap; }
+  .header-stats { gap: clamp(8px, 2vw, 22px); }
+  .stat-num { font-size: clamp(0.85rem, 2.5vw, 1.3rem); }
+  .stat-label { font-size: 0.6rem; letter-spacing: 0.07em; }
+
+  /* Bottom panel */
+  #timeline-panel {
+    padding: 10px 14px calc(10px + var(--safe-bottom));
+  }
+  .timeline-label { margin-bottom: 6px; }
+  .timeline-label > span:first-child { display: none; } /* hide instruction text on all sizes, show display only */
+  .year-display { font-size: 0.95rem; }
+  .timeline-track { height: 28px; }
+  .tick-line { height: 7px; }
+  .tick.active .tick-line { height: 11px; }
+  .tick-year { font-size: 0.48rem; }
+
+  /* Side panel responsive */
+  #side-panel {
+    top: calc(var(--header-h) + 50px) !important;
+    left: 12px !important; right: auto !important;
+    bottom: auto !important;
+    width: min(280px, calc(100vw - 24px)) !important;
+    max-height: 60dvh;
+    padding: 0 12px 12px !important;
+    transform: translateX(-110%);
+    transition: transform 0.35s cubic-bezier(0.32,0.72,0,1);
+    pointer-events: none;
+    z-index: 1100;
+  }
+  #side-panel.open {
+    transform: translateX(0);
+    pointer-events: all;
+  }
+  .side-card { padding: 14px; }
+  .side-card h2 { font-size: 0.82rem; margin-bottom: 8px; }
+  .cohort-list { max-height: calc(100dvh - var(--header-h) - var(--bottom-h) - 200px); }
+  .cohort-item { padding: 7px 8px; min-height: 38px; }
+  .cohort-year-label { font-size: 0.68rem; }
+  .cohort-count { font-size: 0.6rem; }
+  .cohort-badge { font-size: 0.6rem; padding: 2px 5px; }
+
+  /* Scholar popup */
+  #scholar-popup {
+    top: calc(var(--header-h) + 6px);
+    right: 12px;
+    width: min(290px, calc(100vw - 24px));
+  }
+  .popup-body { max-height: 320px; overflow-y: auto; scrollbar-width: thin;
+    scrollbar-color: var(--teal-dim) transparent; }
+  .popup-bio { font-size: 0.76rem; }
+  .popup-now-text { font-size: 0.76rem; }
+
+  /* Country panel */
+  #country-panel {
+    top: calc(var(--header-h) + 306px);
+    right: 12px;
+    max-width: 250px;
+  }
+  #country-panel .side-card { max-height: calc(100dvh - var(--header-h) - var(--bottom-h) - 200px); }
+
+  #fab-menu {
+    display: flex;
+    position: absolute;
+    z-index: 1001;
+    width: 40px; height: 40px;
+    border-radius: 50%;
+    background: var(--teal-bright);
+    color: var(--ocean-deep);
+    border: none;
+    font-size: 1.2rem;
+    cursor: pointer;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 4px 20px rgba(0,212,200,0.4);
+    transition: transform 0.2s, background 0.2s;
+    top: calc(var(--header-h) + 6px);
+    left: 12px;
+    touch-action: manipulation;
+  }
+  #fab-menu:active { transform: scale(0.9); }
+
+  /* Overlay backdrop */
+  #overlay {
+    display: none;
+    position: absolute;
+    inset: 0;
+    z-index: 999;
+    background: rgba(0,0,0,0.35);
+    backdrop-filter: blur(2px);
+  }
+  #overlay.visible { display: block; }
+
+  /* Hint text */
+  .hint-text {
+    font-size: 0.52rem;
+    color: var(--text-muted);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    text-align: center;
+    margin-top: 4px;
+    pointer-events: none;
+  }
+
+  /* ── MOBILE (≤768px) — Bottom-sheet panels ── */
+  @media (max-width: 768px) {
+    :root { --bottom-h: 95px; }
+    .logo-text p { display: none; }
+
+    .cohort-list { max-height: calc(60dvh - 100px); }
+
+    #scholar-popup {
+      top: auto !important;
+      right: 12px;
+      bottom: var(--bottom-h) !important;
+      width: 60% !important;
+      animation: slideUp 0.3s ease;
+    }
+    @keyframes slideUp { from { opacity:0; transform:translateY(24px); } to { opacity:1; transform:translateY(0); } }
+    .popup-card { border-radius: 12px; border-bottom: none; }
+    .popup-body { max-height: 45dvh; }
+
+    /* Country panel hidden on mobile — data shown inline in cohort panel */
+    .side-card {
+      max-height: 30%;
+    }
+
+    /* Tick labels — show fewer on small screens */
+    .tick:nth-child(even) .tick-year { display: none; }
+  }
+
+  @media (max-width: 400px) {
+    .tick:nth-child(n) .tick-year { display: none; }
+    .tick:nth-child(4n+1) .tick-year { display: block; }
+    .header-stats .stat:nth-child(3) { display: none; } /* hide year stat */
+  }
+</style>
+</head>
+<body>
+
+<!-- INTRO SCREEN -->
+<div id="intro">
+  <div class="ocean-bg"></div>
+  <div class="intro-title">
+    Mapping the World's<br><span>Ocean Mappers</span>
+  </div>
+  <div class="intro-divider"></div>
+  <div class="intro-sub">
+    22 years of the Nippon Foundation–GEBCO Postgraduate Training Program — tracking scholars, alumni, and the global reach of ocean bathymetry expertise.
+  </div>
+  <div class="intro-stats">
+    <div class="intro-stat">
+      <div class="intro-stat-num">22</div>
+      <div class="intro-stat-label">Years</div>
+    </div>
+    <div class="intro-stat">
+      <div class="intro-stat-num">130+</div>
+      <div class="intro-stat-label">Scholars</div>
+    </div>
+    <div class="intro-stat">
+      <div class="intro-stat-num">50+</div>
+      <div class="intro-stat-label">Countries</div>
+    </div>
+  </div>
+  <div style="font-size:0.65rem;color:#3d6f82;letter-spacing:0.08em;text-align:center;margin-top:-8px;">130+ scholars · 22 cohorts · 50+ countries · 2004–2026</div>
+  <button class="btn-enter" onclick="enterMap()">Explore the Map →</button>
+</div>
+
+<!-- OVERLAY (mobile backdrop) -->
+<div id="overlay" onclick="closeSidePanel()"></div>
+
+<!-- MAP -->
+<div id="map"></div>
+
+<!-- HEADER -->
+<div id="header">
+  <div class="logo-area">
+    <div class="logo-dot"></div>
+    <div class="logo-text">
+      <h1>NF–GEBCO Scholar Atlas</h1>
+      <p>Nippon Foundation · Ocean Bathymetry Training Program</p>
+    </div>
+  </div>
+  <div class="header-stats">
+    <div class="stat">
+      <div class="stat-num" id="stat-scholars">0</div>
+      <div class="stat-label">Scholars</div>
+    </div>
+    <div class="stat">
+      <div class="stat-num" id="stat-countries">0</div>
+      <div class="stat-label">Countries</div>
+    </div>
+    <div class="stat">
+      <div class="stat-num" id="stat-year">All</div>
+      <div class="stat-label">Cohort</div>
+    </div>
+  </div>
+</div>
+
+<!-- FAB — mobile menu toggle -->
+<button id="fab-menu" onclick="toggleSidePanel()" aria-label="Open cohort filter">☰</button>
+
+<!-- SIDE PANEL -->
+<div id="side-panel">
+  <div class="side-card">
+    <h2>Cohort Years</h2>
+    <div class="cohort-list" id="cohort-list"></div>
+  </div>
+</div>
+
+<!-- SCHOLAR POPUP -->
+<div id="scholar-popup">
+  <div class="popup-card">
+    <div class="popup-header">
+      <div class="popup-flag" id="p-flag">🌐</div>
+      <div class="popup-header-text">
+        <div class="popup-name" id="p-name">Scholar Name</div>
+        <div class="popup-country" id="p-country">Country</div>
+      </div>
+      <button class="popup-close" onclick="closePopup()">✕</button>
+    </div>
+    <div class="popup-body">
+      <div class="popup-cohort-badge" id="p-cohort">Year 1 · 2004–2005</div>
+      <div class="popup-bio" id="p-bio">Bio text here.</div>
+      <div class="popup-now">
+        <div class="popup-now-label">Currently</div>
+        <div class="popup-now-text" id="p-now">Role and organization</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- COUNTRY/GENDER STATS PANEL -->
+<div id="country-panel">
+  <div id="gender-panel" class="side-card">
+    <div class="gender-header">Gender Split</div>
+    <div class="gender-stats">
+      <div class="gender-item female">
+        <span class="gender-dot"></span>
+        <span class="gender-item-h1">FEMALE</span>
+        <span id="stat-female">0</span>
+      </div>
+      <div class="gender-item male">
+        <span class="gender-dot"></span>
+        <span class="gender-item-h1">MALE</span>
+        <span id="stat-male">0</span>
+      </div>
+    </div>
+    <div class="gender-bar-wrap">
+      <span class="gender-pct-left" id="stat-female-pct">0%</span>
+
+      <div class="gender-bar">
+        <div class="gender-bar-female" id="gender-bar-female"></div>
+        <div class="gender-bar-male" id="gender-bar-male"></div>
+      </div>
+
+      <span class="gender-pct-right" id="stat-male-pct">0%</span>
+    </div>
+  </div>
+  <div class="side-card">
+    <div class="country-panel-header">
+      <h2>By Country</h2>
+      <div class="country-panel-sub" id="country-panel-sub">all years</div>
+    </div>
+    <div class="country-list" id="country-list"></div>
+  </div>
+</div>
+
+<!-- BOTTOM / TIMELINE -->
+<div id="timeline-panel">
+  <div class="timeline-label">
+    <span>Click year(s) to filter</span>
+    <span class="year-display" id="year-display">All Years</span>
+  </div>
+  <div class="timeline-track">
+    <div class="year-ticks" id="year-ticks"></div>
+  </div>
+  <div class="hint-text">tap year to filter · tap again to deselect · tap markers to explore</div>
+</div>
+
+<script>
+// ─────────────────────────────────────────────
+// SCHOLAR DATA
+// ─────────────────────────────────────────────
+// ─────────────────────────────────────────────
+// DATA SOURCE
+// Set your Google Sheet CSV URL below.
+// Instructions:
+//   1. Create a Google Sheet with these exact column headers in row 1:
+//      id | year | name | country | flag | lat | lng | bio | now | gender | role | era
+//   2. File → Share → Publish to web → Sheet1 → CSV → Copy link
+//   3. Paste the link as the value of SHEET_CSV_URL below
+//   4. Save and reload the map — scholars update automatically from the sheet
+//
+// To add a new scholar: just add a new row in the sheet. No code editing needed.
+// To update a bio or role: edit the cell. Reload the map to see changes.
+// ─────────────────────────────────────────────
+const SHEET_CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vT-KMzDGisVp5g9Fg9C4fTVhgUQPDNbqkueT_vTm87j7eUqrbiK2kDNoSj-tcMhLA/pub?gid=2052228346&single=true&output=csv'; // ← paste your published Google Sheet CSV URL here
+
+// ─────────────────────────────────────────────
+// HARDCODED FALLBACK DATA (used when no sheet URL is set, or fetch fails)
+// ─────────────────────────────────────────────
+const FALLBACK_SCHOLARS = [
+  // ── YEAR 1 · 2004–2005 ── (7 scholars — VERIFIED)
+  { id:1, year:1, name:"Clive Angeweny", country:"Kenya", flag:"🇰🇪",
+    lat:-0.0236, lng:37.9062,
+    bio:"Clive received his BS in Mathematics from the University of Nairobi (1994) and his MS in Physical Oceanography from Gothenburg University, Sweden (2002). He joined the Kenya Marine and Fisheries Research Institute in 1996, working in physical oceanography with a focus on wave-induced circulation in coastal areas and oceanographic data management.",
+    now:"Kenya Marine and Fisheries Research Institute — Physical Oceanography Dept.", era:1 },
+
+  { id:2, year:1, name:"Srinivas Karlapati", country:"India", flag:"🇮🇳",
+    lat:15.2993, lng:74.1240,
+    bio:"Technical Officer at the National Institute of Oceanography, India. Srinivas joined the inaugural GEBCO cohort bringing expertise in oceanographic instrumentation and data collection from NIO's Goa campus.",
+    now:"Technical Officer, National Institute of Oceanography, India", era:1 },
+
+  { id:3, year:1, name:"Hugo Montoro", country:"Peru", flag:"🇵🇪",
+    lat:-9.1900, lng:-75.0152,
+    bio:"Commander in the Peruvian Navy and Head of River Hydrography. Hugo brought a unique specialisation in inland and riverine hydrographic surveying alongside ocean mapping to the founding cohort.",
+    now:"Commander, Head of River Hydrography, Peruvian Navy", era:1 },
+
+  { id:4, year:1, name:"Taisai Morishita", country:"Japan", flag:"🇯🇵",
+    lat:36.2048, lng:138.2529,
+    bio:"Taisai joined from the Japanese government's oceanographic community. He went on to serve at the Cabinet Secretariat for Headquarters of Ocean Policy, Japan — one of the most senior governmental ocean-policy roles in the world.",
+    now:"Deputy Cabinet Counselor, Secretariat for HQ of Ocean Policy, Government of Japan", era:1 },
+
+  { id:5, year:1, name:"Abubakar Mustapha", country:"Nigeria", flag:"🇳🇬",
+    lat:9.0820, lng:8.6753,
+    bio:"Commander in the Nigerian Navy, Abubakar was among the first African naval hydrographers to complete the GEBCO certificate program, bringing deep-ocean mapping expertise back to Nigeria's hydrographic office.",
+    now:"Commander, Nigerian Navy Hydrographic Office", era:1 },
+
+  { id:6, year:1, name:"Walter Reynoso-Peralta", country:"Argentina", flag:"🇦🇷",
+    lat:-38.4161, lng:-63.6167,
+    bio:"Specialist Hydrographer with the Argentinean Navy. Walter was one of the founding cohort's South American representatives, focusing on hydrographic survey operations in Argentine waters.",
+    now:"Specialist Hydrographer, Argentinean Navy", era:1 },
+
+  { id:7, year:1, name:"Shereen Sharma", country:"Fiji", flag:"🇫🇯",
+    lat:-17.7134, lng:178.0650,
+    bio:"GIS Specialist from Fiji, Shereen was a pioneering voice for Pacific Island representation in deep-ocean mapping. She went on to work as a GIS Specialist with Fugro Survey Ltd. in Australia.",
+    now:"GIS Specialist, Fugro Survey Ltd., Australia", era:1 },
+
+  // ── YEAR 2 · 2005–2006 ── (5 scholars — VERIFIED)
+  { id:8, year:2, name:"Muhammad Bashir", country:"Pakistan", flag:"🇵🇰",
+    lat:30.3753, lng:69.3451,
+    bio:"Commander in the Pakistan Navy. Muhammad brought strong naval hydrographic surveying expertise from Pakistan's Hydrographic Department to his year at CCOM/JHC.",
+    now:"Commander, Pakistan Navy — Deputy Head, Pakistan Hydrographic Department", era:1 },
+
+  { id:9, year:2, name:"Jorge Luis Heredia Bustamante", country:"Mexico", flag:"🇲🇽",
+    lat:23.6345, lng:-102.5528,
+    bio:"Lieutenant Commander in the Mexican Navy. Jorge served as Captain of a Hydrographic Survey Vessel, bringing hands-on seafloor mapping operations experience from Mexican waters.",
+    now:"Lt. Commander, Mexican Navy — Captain, Hydrographic Survey Vessel", era:1 },
+
+  { id:10, year:2, name:"Djoko Hartoyo", country:"Indonesia", flag:"🇮🇩",
+    lat:-6.2088, lng:106.8456,
+    bio:"Hydrographer at Indonesia's Technology Center for Marine Survey (BPPT). Djoko contributed to expanding Indonesia's national capability in multibeam bathymetric surveying across the archipelago.",
+    now:"Hydrographer, Technology Center for Marine Survey, Indonesia", era:1 },
+
+  { id:11, year:2, name:"Apolonio Monreal Lagonsin", country:"Philippines", flag:"🇵🇭",
+    lat:12.8797, lng:121.7740,
+    bio:"Hydrographer at the National Mapping and Resource Information Authority (NAMRIA), Philippines. Apolonio helped build the Philippines' capacity in ocean bathymetry as part of the second GEBCO cohort.",
+    now:"Hydrographer, National Mapping and Resource Information Authority (NAMRIA), Philippines", era:1 },
+
+  { id:12, year:2, name:"Tsuyoshi Yoshida", country:"Japan", flag:"🇯🇵",
+    lat:35.6762, lng:139.6503,
+    bio:"From the Hydrographic and Oceanographic Department of the Japan Coast Guard, Tsuyoshi represented Japan's strong tradition of precision ocean mapping and international GEBCO collaboration.",
+    now:"Hydrographic and Oceanographic Department, Japan Coast Guard", era:1 },
+
+  // ── YEAR 3 · 2006–2007 ── (6 scholars — VERIFIED)
+  { id:13, year:3, name:"Jose Gianella", country:"Peru", flag:"🇵🇪",
+    lat:-9.1900, lng:-75.0152,
+    bio:"From Peru's Directorate of Hydrography and Navigation (DHN). Jose continued Peru's strong representation in the GEBCO program, focusing on South American coastal and deep-water mapping.",
+    now:"Directorate of Hydrography and Navigation, Peruvian Navy", era:1 },
+
+  { id:14, year:3, name:"Yasutaka Katagiri", country:"Japan", flag:"🇯🇵",
+    lat:35.6762, lng:139.6503,
+    bio:"One of three Japanese scholars in the Year 3 cohort, Yasutaka joined from Japan's extensive national hydrographic network, strengthening Japan–GEBCO collaboration in deep-ocean science.",
+    now:"Japan Coast Guard / Hydrographic and Oceanographic Department", era:1 },
+
+  { id:15, year:3, name:"Vasudev Mahale", country:"India", flag:"🇮🇳",
+    lat:15.2993, lng:74.1240,
+    bio:"From the National Institute of Oceanography, India. Vasudev joined the third GEBCO cohort bringing expertise in Indian Ocean deep-water data collection and marine scientific research.",
+    now:"National Institute of Oceanography, India", era:1 },
+
+  { id:16, year:3, name:"Nguyen Thanh", country:"Vietnam", flag:"🇻🇳",
+    lat:14.0583, lng:108.2772,
+    bio:"Representing Vietnam's growing investment in ocean science, Nguyen Thanh focused on bathymetric survey methods applicable to Vietnam's complex coastal and offshore environments.",
+    now:"Vietnam — Ocean mapping professional", era:1 },
+
+  { id:17, year:3, name:"Leonardo Tun Humbert", country:"Mexico", flag:"🇲🇽",
+    lat:19.4326, lng:-99.1332,
+    bio:"From Mexico, Leonardo contributed to the GEBCO cohort's work on deep-water mapping techniques and went on to apply his skills to Mexican offshore hydrographic operations.",
+    now:"Mexico — Ocean mapping professional", era:1 },
+
+  { id:18, year:3, name:"Muhammad Yazid", country:"Indonesia", flag:"🇮🇩",
+    lat:-7.7956, lng:110.3695,
+    bio:"Indonesian ocean mapping professional who joined the third GEBCO cohort, building on Indonesia's extensive coastal and archipelagic hydrographic surveying tradition.",
+    now:"Indonesia — Ocean mapping professional", era:1 },
+
+  // ── YEAR 4 · 2007–2008 ── (6 scholars — VERIFIED)
+  { id:131, year:4, name:"Rochelle Wigley", country:"South Africa", flag:"🇿🇦",
+    lat:-33.9249, lng:18.4241,
+    bio:"Rochelle Wigley is a marine geoscientist specializing in geochemistry, sedimentology, and ocean mapping. She holds an M.S. in Igneous Geochemistry and a Ph.D. focused on continental shelf evolution off southern Africa. She contributed to South Africa’s offshore mapping initiatives. She is now Project Director for Nippon Foundation–GEBCO Training program at the University of New Hampshire and supports the international alumni network.",
+    now:"NF-GEBCO Project Director, CCOM/JHC, University of New Hampshire · rochelle@ccom.unh.edu",
+    role:"director", era:1 },
+  { id:19, year:4, name:"Daniela Maria Silva Gonçalves", country:"Portugal", flag:"🇵🇹",
+    lat:39.3999, lng:-8.2245,
+    bio:"PhD Candidate at the University of Aveiro, Portugal. Daniela brought academic marine science expertise to the GEBCO program, focusing on seafloor mapping in Portuguese and Atlantic waters.",
+    now:"PhD Candidate, University of Aveiro, Portugal", era:1 },
+
+  { id:20, year:4, name:"Koji Ito", country:"Japan", flag:"🇯🇵",
+    lat:35.6762, lng:139.6503,
+    bio:"Researcher at the Hydrographic and Oceanographic Department of the Japan Coast Guard. Koji contributed to Japan's leading-edge hydrographic research and international GEBCO collaboration.",
+    now:"Researcher, Hydrographic and Oceanographic Department, Japan Coast Guard", era:1 },
+
+  { id:21, year:4, name:"Priyantha Jinadasa", country:"Sri Lanka", flag:"🇱🇰",
+    lat:7.8731, lng:80.7718,
+    bio:"Research Officer at the National Aquatic Resources Research and Development Agency (NARA), Sri Lanka. Priyantha focused on ocean mapping in Sri Lankan coastal waters.",
+    now:"Research Officer, National Aquatic Resources Research and Development Agency, Sri Lanka", era:1 },
+
+  { id:22, year:4, name:"Neil Tinmouth", country:"South Africa", flag:"🇿🇦",
+    lat:-30.5595, lng:22.9375,
+    bio:"Geologist with Van Oord Dredging and Marine Contractors. Neil brought applied industry experience in marine geotechnics and seafloor characterisation from South Africa.",
+    now:"Geologist, Van Oord Dredging and Marine Contractors", era:1 },
+
+  { id:23, year:4, name:"Mohammad Jashim Uddin", country:"Bangladesh", flag:"🇧🇩",
+    lat:23.6850, lng:90.3563,
+    bio:"Head of the Hydrographic School of the Bangladesh Navy. Mohammad played a key role in building Bangladesh's next generation of naval hydrographers following his GEBCO training.",
+    now:"Head of Hydrographic School, Bangladesh Navy", era:1 },
+];
+
+// Gender colour scheme — teal for female, amber for male, grey for unknown
+// ─────────────────────────────────────────────
+// GENDER LOOKUP (used for fallback data only — sheet includes gender column)
+
+// ─────────────────────────────────────────────
+const GENDER_BY_ID = {
+  // Year 1
+  1:'M',2:'M',3:'M',4:'M',5:'M',6:'M',7:'F',
+  // Year 2
+  8:'M',9:'M',10:'M',11:'M',12:'M',
+  // Year 3
+  13:'M',14:'M',15:'M',16:'M',17:'M',18:'M',
+  // Year 4
+  19:'F',20:'M',21:'M',22:'M',23:'M',131:'F',
+};
+
+// Apply gender to scholars// ─────────────────────────────────────────────
+// CSV PARSER — parse a published Google Sheet CSV
+// ─────────────────────────────────────────────
+function parseCSV(text) {
+  const lines = text.trim().split('\n');
+  const headers = lines[0].split(',').map(h => h.trim().replace(/^"|"$/g,'').toLowerCase());
+  return lines.slice(1).map(line => {
+    // Handle quoted fields with commas inside
+    const fields = [];
+    let cur = '', inQ = false;
+    for (let i = 0; i < line.length; i++) {
+      const ch = line[i];
+      if (ch === '"') { inQ = !inQ; }
+      else if (ch === ',' && !inQ) { fields.push(cur); cur = ''; }
+      else { cur += ch; }
+    }
+    fields.push(cur);
+    const obj = {};
+    headers.forEach((h, i) => {
+      obj[h] = (fields[i] || '').trim().replace(/^"|"$/g,'');
+    });
+    return {
+      id:    parseInt(obj.id) || 0,
+      year:  parseInt(obj.year) || 1,
+      name:  obj.name || '',
+      country: obj.country || '',
+      flag:  obj.flag || '🌐',
+      lat:   parseFloat(obj.lat) || 0,
+      lng:   parseFloat(obj.lng) || 0,
+      bio:   obj.bio || '',
+      now:   obj.now || '',
+      gender: obj.gender || 'U',
+      role:  obj.role || '',
+      era:   parseInt(obj.era) || 1,
+    };
+  }).filter(s => s.id && s.name);
+}
+
+// ─────────────────────────────────────────────
+// LOADING STATE — shown while fetching sheet
+// ─────────────────────────────────────────────
+function showLoadingOverlay(msg) {
+  let el = document.getElementById('data-loading');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'data-loading';
+    el.style.cssText = `position:absolute;bottom:calc(var(--bottom-h,105px) + 10px);
+      left:50%;transform:translateX(-50%);z-index:2000;
+      background:rgba(5,13,26,0.9);border:1px solid rgba(0,212,200,0.3);
+      border-radius:20px;padding:7px 18px;font-size:0.7rem;color:#7bb8cc;
+      letter-spacing:0.08em;backdrop-filter:blur(8px);display:flex;gap:8px;align-items:center;`;
+    document.body.appendChild(el);
+  }
+  el.innerHTML = `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;
+    background:#00d4c8;animation:pulse-marker 1s ease-in-out infinite"></span>${msg}`;
+  el.style.display = 'flex';
+}
+
+function hideLoadingOverlay() {
+  const el = document.getElementById('data-loading');
+  if (el) el.style.display = 'none';
+}
+
+// ─────────────────────────────────────────────
+// MAIN DATA LOADER — tries sheet first, falls back to hardcoded
+// ─────────────────────────────────────────────
+let scholars = [];
+
+async function loadScholars() {
+  if (SHEET_CSV_URL) {
+    showLoadingOverlay('Loading scholars from sheet…');
+    try {
+      const resp = await fetch(SHEET_CSV_URL);
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      const text = await resp.text();
+      const parsed = parseCSV(text);
+      if (parsed.length === 0) throw new Error('No rows parsed');
+      scholars = parsed;
+      hideLoadingOverlay();
+      console.log(`✓ Loaded ${scholars.length} scholars from Google Sheet`);
+      return;
+    } catch(e) {
+      console.warn('Sheet fetch failed, using fallback data:', e.message);
+      showLoadingOverlay('Sheet unavailable — using built-in data');
+      setTimeout(hideLoadingOverlay, 3000);
+    }
+  }
+  // No URL set or fetch failed — use fallback
+  scholars = FALLBACK_SCHOLARS.map(s => ({
+    ...s,
+    gender: s.gender || GENDER_BY_ID[s.id] || 'U',
+  }));
+}
+// Gender colour scheme — teal for female, amber for male
+const GENDER_COLORS = { F:'#00d4c8', M:'#f5a623', U:'#6b8fa3' };
+
+// COHORT_YEARS built dynamically from loaded scholars
+function buildCohortYears() {
+  const years = [...new Set(scholars.map(s => s.year))].sort((a,b)=>a-b);
+  return years.map(y => ({
+    year: y,
+    label: `${2003+y}–${2004+y}`,
+    era: y<=7?1:y<=14?2:y<=19?3:4
+  }));
+}
+let COHORT_YEARS = [];
+
+// ─────────────────────────────────────────────
+// INIT MAP
+// ─────────────────────────────────────────────
+const map = L.map('map', {
+  center: [20, 15],
+  zoom: 2.1,
+  minZoom: 2.1,
+  zoomControl: false,
+  attributionControl: false,
+});
+
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  maxZoom: 18,
+}).addTo(map);
+
+L.control.zoom({ position: 'bottomleft' }).addTo(map);
+
+// ─────────────────────────────────────────────
+// FILTER STATE — years + optional country
+// ─────────────────────────────────────────────
+let activeYears = null;   // null = all
+let activeCountry = null; // null = all
+
+function getShown() {
+  let s = scholars;
+  if (activeYears && activeYears.size > 0) s = s.filter(x => activeYears.has(x.year));
+  if (activeCountry) s = s.filter(x => x.country === activeCountry);
+  return s;
+}
+
+// ─────────────────────────────────────────────
+// COUNTRY GEOJSON LAYER
+// ─────────────────────────────────────────────
+let geoLayer = null;
+let geoData = null;
+
+// ISO country name → canonical scholar country name mapping
+const ISO_TO_SCHOLAR = {
+  'Japan':'Japan','India':'India','Peru':'Peru','Nigeria':'Nigeria',
+  'Argentina':'Argentina','Fiji':'Fiji','Pakistan':'Pakistan','Mexico':'Mexico',
+  'Indonesia':'Indonesia','Philippines':'Philippines','Portugal':'Portugal',
+  'Vietnam':'Vietnam','Australia':'Australia','Russia':'Russia','Chile':'Chile',
+  'Brazil':'Brazil','Thailand':'Thailand','Colombia':'Colombia',
+  'South Africa':'South Africa','Bangladesh':'Bangladesh','Sri Lanka':'Sri Lanka',
+  'Malaysia':'Malaysia','Myanmar':'Myanmar','Poland':'Poland','Ghana':'Ghana',
+  'Spain':'Spain','Ecuador':'Ecuador','Mauritius':'Mauritius','Israel':'Israel',
+  'Kenya':'Kenya','Venezuela':'Venezuela','Barbados':'Barbados','Latvia':'Latvia',
+  'Egypt':'Egypt','Madagascar':'Madagascar','Angola':'Angola',
+  'St. Vincent and the Grenadines':'St. Vincent and the Grenadines',
+  'Jamaica':'Jamaica','Greece':'Greece','Kiribati':'Kiribati',
+  'United Kingdom':'United Kingdom','Ireland':'Ireland','Denmark':'Denmark',
+  'Tanzania':'Tanzania','Morocco':'Morocco','Oman':'Oman','Algeria':'Algeria',
+  'Tunisia':'Tunisia','Panama':'Panama','Canada':'Canada','Norway':'Norway',
+};
+
+function getScholarCountrySet() {
+  return new Set(scholars.map(s => s.country));
+}
+function getShownCountrySet() {
+  return new Set(getShown().map(s => s.country));
+}
+
+function countryStyle(feature) {
+  const name = feature.properties.name || feature.properties.NAME || '';
+  const scholarCountries = getScholarCountrySet();
+  const shownCountries = getShownCountrySet();
+
+  // Map GeoJSON name to scholar country key — try exact, then partial
+  let matchKey = null;
+  if (scholarCountries.has(name)) matchKey = name;
+  else {
+    for (const k of scholarCountries) {
+      if (name.includes(k) || k.includes(name)) { matchKey = k; break; }
+    }
+  }
+  // Special cases
+  if (name === 'Northern Ireland' || name === 'United Kingdom') matchKey = 'United Kingdom';
+  if (name === 'Azores') matchKey = 'Azores / Portugal';
+
+  const isParticipant = !!matchKey;
+  const isShown = matchKey && shownCountries.has(matchKey);
+  const isActive = matchKey && matchKey === activeCountry;
+
+  if (isActive) return { fillColor:'#00d4c8', fillOpacity:0.45, color:'#00d4c8', weight:1.5, opacity:1 };
+  if (isShown) return { fillColor:'#7bb8cc', fillOpacity:0.22, color:'#00a89e', weight:0.8, opacity:0.7 };
+  if (isParticipant) return { fillColor:'#3d6f82', fillOpacity:0.12, color:'#3d6f82', weight:0.5, opacity:0.4 };
+  return { fillColor:'transparent', fillOpacity:0, color:'#1a3a4a', weight:0.3, opacity:0.3 };
+}
+
+function onEachCountryFeature(feature, layer) {
+  const props = feature.properties || {};
+  const name = props.ADMIN || props.name || props.NAME || props.NAME_LONG || props.sovereignt || '';
+  const scholarCountries = getScholarCountrySet();
+  let matchKey = null;
+  if (scholarCountries.has(name)) matchKey = name;
+  else {
+    for (const k of scholarCountries) {
+      if (name.includes(k) || k.includes(name)) { matchKey = k; break; }
+    }
+  }
+  if (name === 'United Kingdom' || name === 'Northern Ireland') matchKey = 'United Kingdom';
+  if (name === 'Azores') matchKey = 'Azores / Portugal';
+  if (name === 'Saint Vincent and the Grenadines') matchKey = 'St. Vincent and the Grenadines';
+
+  if (!matchKey) return;
+
+  layer.on({
+    mouseover() {
+      const cnt = scholars.filter(s => s.country === matchKey).length;
+      const shownCnt = getShown().filter(s => s.country === matchKey).length;
+      layer.bindTooltip(
+        `<strong>${matchKey}</strong><br>${shownCnt} scholar${shownCnt!==1?'s':''} shown${shownCnt!==cnt?' ('+cnt+' total)':''}`,
+        { sticky:true, className:'country-tooltip' }
+      ).openTooltip();
+    },
+    mouseout() { layer.closeTooltip(); },
+    click() {
+      activeCountry = activeCountry === matchKey ? null : matchKey;
+      geoLayer.setStyle(countryStyle);
+      renderMarkers();
+      updateCountryPanel(getShown());
+      updateCountryBadge();
+    }
+  });
+}
+
+async function loadCountries() {
+  // Try multiple CDN sources in order
+  const sources = [
+    'https://cdn.jsdelivr.net/npm/geojson-world-map@1.0.0/world.json',
+    'https://unpkg.com/world-atlas@2.0.2/countries-110m.json',
+  ];
+  // Use a bundled minimal SVG world approach instead — embed key country polygons
+  // as simplified GeoJSON rectangles for participant countries
+  // Actually: fetch from datahub.io which has reliable CORS
+  try {
+    const resp = await fetch('https://datahub.io/core/geo-countries/r/countries.geojson');
+    if (!resp.ok) throw new Error('bad response');
+    geoData = await resp.json();
+    geoLayer = L.geoJSON(geoData, {
+      style: countryStyle,
+      onEachFeature: onEachCountryFeature,
+    }).addTo(map);
+    geoLayer.bringToBack();
+    return;
+  } catch(e) {}
+
+  // Fallback: draw simple highlight rectangles for each participant country
+  drawFallbackHighlights();
+}
+
+// Bounding boxes for participant countries — fallback if GeoJSON fails
+const COUNTRY_BOUNDS = {
+  'Japan':[[24,122],[46,154]],'India':[[6,67],[36,98]],'Peru':[[-18,-82],[0,-68]],
+  'Nigeria':[[3,3],[14,15]],'Argentina':[[-56,-74],[-21,-53]],'Fiji':[[-21,177],[-15,180]],
+  'Pakistan':[[23,61],[37,78]],'Mexico':[[14,-118],[33,-86]],'Indonesia':[[-11,95],[6,141]],
+  'Philippines':[[4,116],[21,128]],'Portugal':[[36,-10],[42,-6]],'Vietnam':[[8,102],[24,110]],
+  'Australia':[[-44,112],[-10,154]],'Russia':[[41,19],[82,180]],'Chile':[[-56,-76],[-17,-65]],
+  'Brazil':[[-34,-74],[5,-28]],'Thailand':[[5,97],[21,106]],'Colombia':[[0,-78],[12,-66]],
+  'South Africa':[[-35,16],[-22,33]],'Bangladesh':[[20,88],[27,93]],'Sri Lanka':[[5,79],[10,82]],
+  'Malaysia':[[0,99],[8,120]],'Myanmar':[[9,92],[29,102]],'Poland':[[49,14],[55,24]],
+  'Ghana':[[4,-4],[11,2]],'Spain':[[36,-10],[44,5]],'Ecuador':[[-5,-81],[2,-75]],
+  'Mauritius':[[-21,57],[-19,58]],'Israel':[[29,34],[34,36]],'Kenya':[[-5,33],[5,42]],
+  'Venezuela':[[0,-74],[13,-59]],'Barbados':[[12,-60],[14,-58]],'Latvia':[[55,20],[58,28]],
+  'Egypt':[[21,24],[32,37]],'Madagascar':[[-26,43],[-11,51]],'Angola':[[-18,11],[-4,25]],
+  'Jamaica':[[17,-78],[18,-76]],'Greece':[[34,19],[42,27]],'Kiribati':[[-12,172],[4,177]],
+  'United Kingdom':[[49,-8],[61,2]],'Ireland':[[51,-10],[55,-5]],'Denmark':[[54,8],[58,15]],
+  'Tanzania':[[-12,29],[-0,41]],'Morocco':[[27,-14],[36,0]],'Oman':[[16,51],[25,60]],
+  'Algeria':[[18,-3],[38,9]],'Tunisia':[[30,7],[38,12]],'Panama':[[7,-83],[10,-77]],
+  'Canada':[[41,-141],[84,-52]],'St. Vincent and the Grenadines':[[12,-62],[14,-60]],
+  'Northern Ireland':[[53,-8],[56,-5]],'Azores / Portugal':[[36,-32],[43,-24]],
+};
+
+function drawFallbackHighlights() {
+  const shown = getShownCountrySet();
+  const all = getScholarCountrySet();
+  // Draw rectangles
+  all.forEach(country => {
+    const bounds = COUNTRY_BOUNDS[country];
+    if (!bounds) return;
+    const isShown = shown.has(country);
+    const isActive = country === activeCountry;
+    const rect = L.rectangle(bounds, {
+      color: isActive ? '#00d4c8' : isShown ? '#00a89e' : '#3d6f82',
+      weight: isActive ? 1.5 : 0.8,
+      fillColor: isActive ? '#00d4c8' : isShown ? '#7bb8cc' : '#3d6f82',
+      fillOpacity: isActive ? 0.35 : isShown ? 0.18 : 0.08,
+      interactive: true,
+    }).addTo(map);
+    rect.on('click', () => {
+      activeCountry = activeCountry === country ? null : country;
+      renderMarkers();
+      updateCountryBadge();
+    });
+    rect.bindTooltip(country, { sticky:true, className:'country-tooltip' });
+    markers.push({ marker: rect, scholar: null });
+  });
+}
+
+function refreshCountryLayer() {
+  if (geoLayer) {
+    geoLayer.setStyle(countryStyle);
+  }
+}
+
+function updateCountryBadge() {
+  let badge = document.getElementById('country-badge');
+  if (!badge) {
+    badge = document.createElement('div');
+    badge.id = 'country-badge';
+    badge.style.cssText = `position:absolute;top:90px;left:50%;transform:translateX(-50%);z-index:1001;
+      background:rgba(5,13,26,0.92);border:1px solid #00d4c8;border-radius:20px;
+      padding:6px 16px;font-size:0.75rem;color:#00d4c8;letter-spacing:0.08em;
+      display:flex;align-items:center;gap:8px;cursor:pointer;backdrop-filter:blur(8px);`;
+    badge.addEventListener('click', () => {
+      activeCountry = null;
+      refreshCountryLayer();
+      renderMarkers();
+      updateCountryBadge();
+    });
+    document.body.appendChild(badge);
+  }
+  if (activeCountry) {
+    const flag = scholars.find(s=>s.country===activeCountry)?.flag || '🌐';
+    const cnt = getShown().length;
+    badge.innerHTML = `${flag} ${activeCountry} · ${cnt} scholar${cnt!==1?'s':''} &nbsp;<span style="opacity:0.6;font-size:0.9em">✕ clear</span>`;
+    badge.style.display = 'flex';
+  } else {
+    badge.style.display = 'none';
+  }
+}
+
+// ─────────────────────────────────────────────
+// MARKERS — cluster same-location scholars
+// ─────────────────────────────────────────────
+let markers = [];
+
+// Group scholars by rounded lat/lng key
+function groupByLocation(scholarList) {
+  const groups = {};
+  scholarList.forEach(s => {
+    const key = `${s.lat.toFixed(2)},${s.lng.toFixed(2)}`;
+    if (!groups[key]) groups[key] = { lat: s.lat, lng: s.lng, scholars: [] };
+    groups[key].scholars.push(s);
+  });
+  return Object.values(groups);
+}
+
+// Arrange scholars in a small spiral when >1 at same point
+function spiralOffset(index, total) {
+  if (total === 1) return [0, 0];
+  const angle = (index / total) * 2 * Math.PI;
+  const r = total <= 3 ? 0.35 : total <= 6 ? 0.5 : total <= 10 ? 0.65 : 0.8;
+  return [Math.cos(angle) * r, Math.sin(angle) * r];
+}
+
+function createClusterMarker(group) {
+  const { lat, lng, scholars: grpScholars } = group;
+  const n = grpScholars.length;
+
+  if (n === 1) {
+    // Single dot
+    const s = grpScholars[0];
+    const color = GENDER_COLORS[s.gender || 'U'];
+    const icon = L.divIcon({
+      className: '',
+      html: `<div class="scholar-marker" style="background:${color};box-shadow:0 0 8px ${color}88;"></div>`,
+      iconSize: [14,14], iconAnchor: [7,7],
+    });
+    const m = L.marker([lat, lng], { icon }).addTo(map)
+      .on('click', () => showScholar(s));
+    markers.push({ marker: m, scholar: s });
+  } else {
+    // Multiple scholars — show count badge + individual jittered dots
+    // Count badge at centre
+    const fCount = grpScholars.filter(s=>s.gender==='F').length;
+    const mCount = grpScholars.filter(s=>s.gender==='M').length;
+    const uCount = n - fCount - mCount;
+    const fPct = (fCount / n) * 100;
+    const mPct = (mCount / n) * 100;
+    const uPct = (uCount / n) * 100;
+
+    // Build conic-gradient: teal=female, amber=male, grey=unknown
+    // Segments go: female (0 → fPct%), male (fPct% → fPct+mPct%), unknown (rest)
+    const f = '#00d4c8', m = '#f5a623', u = '#6b8fa3';
+    let grad;
+    if (fCount === n) {
+      grad = f; // all female — solid teal
+    } else if (mCount === n) {
+      grad = m; // all male — solid amber
+    } else {
+      // mixed — conic pie
+      const fEnd = fPct;
+      const mEnd = fEnd + mPct;
+      grad = `conic-gradient(${f} 0% ${fEnd.toFixed(1)}%, ${m} ${fEnd.toFixed(1)}% ${mEnd.toFixed(1)}%${uCount > 0 ? `, ${u} ${mEnd.toFixed(1)}% 100%` : ''})`;
+    }
+
+    // Glow colour from dominant gender
+    const glowColor = fCount >= mCount ? '#00d4c8' : '#f5a623';
+    const label = `${n} scholars: ♀${fCount} ♂${mCount}${uCount > 0 ? ` ?${uCount}` : ''}`;
+
+    const clusterIcon = L.divIcon({
+      className: '',
+      html: `<div class="cluster-dot" style="background:${grad};box-shadow:0 0 8px ${glowColor}88;" title="${label}"></div>`,
+      iconSize: [14, 14], iconAnchor: [7, 7],
+    });
+    const badge = L.marker([lat, lng], { icon: clusterIcon, zIndexOffset: 100 }).addTo(map)
+      .on('click', () => showPicker(grpScholars, lat, lng));
+    markers.push({ marker: badge, scholar: null });
+  }
+}
+
+// Scholar picker popup for clusters
+function showPicker(grpScholars, lat, lng) {
+  map.panTo([lat, lng], {animate:true, duration:0.5});
+  let picker = document.getElementById('scholar-picker');
+  if (!picker) {
+    picker = document.createElement('div');
+    picker.id = 'scholar-picker';
+    picker.style.cssText = `position:absolute;z-index:2500;width:260px;
+      background:rgba(5,13,26,0.95);border:1px solid rgba(0,212,200,0.25);
+      border-radius:12px;backdrop-filter:blur(14px);box-shadow:0 16px 48px rgba(0,0,0,0.6);
+      overflow:hidden;animation:slideIn 0.2s ease;`;
+    document.body.appendChild(picker);
+  }
+  document.getElementById('scholar-popup').style.display = 'none';
+  document.getElementById('country-panel').style.display = 'none';
+  const isMobile = window.innerWidth <= 768;
+  if (isMobile) {
+    picker.style.cssText = `position:absolute;z-index:2500;right:12px;bottom:var(--bottom-h);width:40%;
+      background:rgba(5,13,26,0.95);border:1px solid rgba(0,212,200,0.25);border-radius:12px;
+      backdrop-filter:blur(14px);box-shadow:0 -8px 32px rgba(0,0,0,0.5);overflow:hidden;scrollbar-width: thin;scrollbar-color: var(--teal-dim) transparent; }`;
+  } else {
+    const mapEl = document.getElementById('map');
+    const rect = mapEl.getBoundingClientRect();
+    picker.style.cssText = `position:absolute;z-index:2500;width:260px;
+      left:${Math.min(rect.width/2 + 20, rect.width - 280)}px;top:calc(var(--header-h,60px) + 70px);
+      background:rgba(5,13,26,0.95);border:1px solid rgba(0,212,200,0.25);
+      border-radius:12px;backdrop-filter:blur(14px);box-shadow:0 16px 48px rgba(0,0,0,0.6);overflow:hidden;scrollbar-width: thin;scrollbar-color: var(--teal-dim) transparent; }`;
+  }
+  
+  const country = grpScholars[0].country;
+  const flag = grpScholars[0].flag;  
+  const n = grpScholars.length;
+  const fC = grpScholars.filter(s=>s.gender==='F').length;
+  const mC = grpScholars.filter(s=>s.gender==='M').length;
+  picker.innerHTML = `
+    <div style="padding:12px 14px 8px;border-bottom:1px solid rgba(0,212,200,0.15);">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <span style="font-family:'Playfair Display',serif;font-size:0.9rem;color:#00d4c8">${flag} ${country}</span>
+        <button onclick="closePopup()"
+          style="background:none;border:none;color:#7bb8cc;cursor:pointer;font-size:1rem;padding:0 4px">✕</button>
+      </div>
+      <div style="margin-top:5px;display:flex;gap:10px;align-items:center">
+        <span style="font-family:'DM Mono',monospace;font-size:0.65rem;color:#7bb8cc">${n} scholars</span>
+        <span style="font-size:0.65rem;color:#00d4c8">♀ ${fC}</span>
+        <span style="font-size:0.65rem;color:#f5a623">♂ ${mC}</span>
+      </div>   
+    </div>
+    <div style="max-height:280px;overflow-y:auto;padding:8px 6px">
+      ${grpScholars.map(s => `
+        <div onclick="showScholar(scholars.find(x=>x.id===${s.id}));document.getElementById('scholar-picker').style.display='none'"
+          style="display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:7px;cursor:pointer;transition:background 0.15s"
+          onmouseover="this.style.background='rgba(0,212,200,0.08)'" onmouseout="this.style.background=''">
+          <div style="width:10px;height:10px;border-radius:50%;background:${GENDER_COLORS[s.gender||'U']};flex-shrink:0;box-shadow:0 0 6px ${GENDER_COLORS[s.gender||'U']}88"></div>
+          <div>
+            <div style="font-size:0.78rem;color:#e8f4f8;font-weight:500">${s.name}</div>
+            <div style="font-size:0.65rem;color:#7bb8cc;margin-top:1px">Year ${s.year} · ${2003+s.year}–${2004+s.year}</div>
+          </div>
+          <div style="margin-left:auto;font-size:0.65rem;color:#3d6f82">${s.gender==='F'?'♀':'♂'}</div>
+        </div>
+      `).join('')}
+    </div>
+  `;
+  picker.style.display = 'block';
+}
+
+function renderMarkers() {
+  markers.forEach(({marker}) => map.removeLayer(marker));
+  markers = [];
+  const shown = getShown();
+  const groups = groupByLocation(shown);
+  groups.forEach(createClusterMarker);
+  updateStats(shown);
+  updateCountryPanel(shown);
+  refreshCountryLayer();
+  // Hide picker on re-render
+  const picker = document.getElementById('scholar-picker');
+  if (picker) picker.style.display = 'none';
+}
+
+function updateStats(shown) {
+  const countries = new Set(shown.map(s=>s.country)).size;
+  const female = shown.filter(s=>s.gender==='F').length;
+  const male = shown.filter(s=>s.gender==='M').length;
+  const totalGender = female + male;
+  const femalePct = totalGender ? Math.round((female / totalGender) * 100) : 0;
+  const malePct = totalGender ? Math.round((male / totalGender) * 100) : 0;
+
+  document.getElementById('stat-female-pct').textContent = `${femalePct}%`;
+  document.getElementById('stat-male-pct').textContent = `${malePct}%`;
+  document.getElementById('gender-bar-female').style.width = `${femalePct}%`;
+  document.getElementById('gender-bar-male').style.width = `${malePct}%`;
+  document.getElementById('stat-scholars').textContent = shown.length;
+  document.getElementById('stat-countries').textContent = countries;
+  document.getElementById('stat-female').textContent = female;
+  document.getElementById('stat-male').textContent = male;
+  if (!activeYears || activeYears.size === 0) {
+    document.getElementById('stat-year').textContent = activeCountry ? activeCountry.split(' ')[0] : 'All';
+  } else if (activeYears.size === 1) {
+    const y = [...activeYears][0];
+    document.getElementById('stat-year').textContent = `Yr ${y}`;
+  } else {
+    document.getElementById('stat-year').textContent = `${activeYears.size} yrs`;
+  }
+}
+
+// ─────────────────────────────────────────────
+// COUNTRY PANEL
+// ─────────────────────────────────────────────
+function updateCountryPanel(shown) {
+  const panel = document.getElementById('country-panel');
+  const list = document.getElementById('country-list');
+  const sub = document.getElementById('country-panel-sub');
+  list.innerHTML = '';
+
+  // Build country counts with flag
+  const countryMap = {};
+  shown.forEach(s => {
+    if (!countryMap[s.country]) countryMap[s.country] = { flag: s.flag, count: 0, female: 0, male: 0 };
+    countryMap[s.country].count++;
+    if (s.gender === 'F') countryMap[s.country].female++;
+    if (s.gender === 'M') countryMap[s.country].male++;
+  });
+
+  const sorted = Object.entries(countryMap).sort((a,b) => b[1].count - a[1].count || a[0].localeCompare(b[0]));
+
+  if (sorted.length === 0) { panel.style.display = 'none'; return; }
+
+  // Only show panel if filtering (not all) OR always show
+  panel.style.display = 'block';
+
+  // Adjust: if scholar popup visible, push country panel below it
+  const scholarPopupVisible = document.getElementById('scholar-popup').style.display === 'block';
+  panel.style.top = scholarPopupVisible ? '440px' : 'calc(var(--header-h) + 6px)';
+
+  if (!activeYears || activeYears.size === 0) {
+    sub.textContent = 'all years';
+  } else {
+    const sorted2 = [...activeYears].sort((a,b)=>a-b);
+    sub.textContent = `yr${activeYears.size>1?'s':''} ${sorted2.join(', ')}`;
+  }
+
+  sorted.forEach(([country, {flag, count, female, male}]) => {
+    const row = document.createElement('div');
+    row.className = 'country-row';
+    const isActive = country === activeCountry;
+    row.style.background = isActive ? 'rgba(0,212,200,0.1)' : '';
+    row.style.borderRadius = '6px';
+    row.innerHTML = `
+      <span class="country-flag">${flag}</span>
+      <span class="country-name">${country}</span>
+      <span style="font-size:0.62rem;color:#00d4c8;margin-right:2px" title="Female">♀${female}</span>
+      <span style="font-size:0.62rem;color:#f5a623" title="Male">♂${male}</span>
+    `;
+    row.style.cursor = 'pointer';
+    row.addEventListener('click', () => {
+      activeCountry = activeCountry === country ? null : country;
+      refreshCountryLayer();
+      renderMarkers();
+      updateCountryBadge();
+    });
+    list.appendChild(row);
+  });
+}
+
+// ─────────────────────────────────────────────
+// SCHOLAR POPUP
+// ─────────────────────────────────────────────
+function showScholar(s) {
+  document.getElementById('p-flag').textContent = s.flag;
+  document.getElementById('p-name').textContent = s.name;
+  document.getElementById('p-country').textContent = s.country;
+  
+  const cohortEl = document.getElementById('p-cohort');
+  if (s.role === 'director') {
+    cohortEl.innerHTML =
+      `Year ${s.year} · ${2003+s.year}–${2004+s.year}` 
+      // +
+      // `<span style="margin-left:8px;background:rgba(0,212,200,0.18);border:1px solid #00d4c8;
+      //   color:#00d4c8;padding:2px 9px;border-radius:20px;font-size:0.6rem;
+      //   letter-spacing:0.08em;vertical-align:middle;">★ Program Director</span>`;
+  } else {
+    cohortEl.textContent = `Year ${s.year} · ${2003+s.year}–${2004+s.year}`;
+  }
+
+  document.getElementById('p-bio').textContent = s.bio;
+  document.getElementById('p-now').textContent = s.now;
+  document.getElementById('scholar-popup').style.display = 'block';
+  map.panTo([s.lat, s.lng], {animate:true, duration:0.5});
+  // Close side panel on mobile when a scholar is opened
+  document.getElementById('country-panel').style.display = 'none';
+  const scholarPicker = document.getElementById('scholar-picker');
+  if (scholarPicker) scholarPicker.style.display = 'none';
+  closeSidePanel();
+}
+
+// ─────────────────────────────────────────────
+// COHORT LIST — multi-select toggle
+// ─────────────────────────────────────────────
+function buildCohortList() {
+  const list = document.getElementById('cohort-list');
+
+  // "All Years" reset button at top
+  const allBtn = document.createElement('div');
+  allBtn.className = 'cohort-item cohort-all active';
+  allBtn.id = 'cohort-all-btn';
+  allBtn.innerHTML = `
+    <div class="cohort-dot" style="background:linear-gradient(135deg,#00d4c8,#f5a623)"></div>
+    <div class="cohort-item-text">
+      <div class="cohort-year-label">All Years</div>
+      <div class="cohort-count">Show everyone</div>
+    </div>
+    <div class="cohort-badge">${scholars.length}</div>
+  `;
+  allBtn.addEventListener('click', () => {
+    activeYears = null;
+    syncCohortUI();
+    syncTimelineTicks();
+    renderMarkers();
+    updateYearDisplay();
+  });
+  list.appendChild(allBtn);
+
+  // Individual year rows
+  COHORT_YEARS.forEach(c => {
+    const count = scholars.filter(s=>s.year===c.year).length;
+    if (count === 0) return;
+    const div = document.createElement('div');
+    div.className = 'cohort-item';
+    div.dataset.year = c.year;
+    div.innerHTML = `
+      <div class="cohort-dot" style="background:#3d6f82"></div>
+      <div class="cohort-item-text">
+        <div class="cohort-year-label">Year ${c.year}</div>
+        <div class="cohort-count">${c.label}</div>
+      </div>
+      <div class="cohort-badge">${count} scholar${count>1?'s':''}</div>
+    `;
+    div.addEventListener('click', (e) => {
+      const y = parseInt(div.dataset.year);
+      if (!activeYears) activeYears = new Set();
+      if (activeYears.has(y)) {
+        activeYears.delete(y);
+        if (activeYears.size === 0) activeYears = null; // back to all
+      } else {
+        activeYears.add(y);
+      }
+      syncCohortUI();
+      syncTimelineTicks();
+      renderMarkers();
+      updateYearDisplay();
+      // On mobile close panel after picking a single year
+      if (window.innerWidth <= 768 && activeYears && activeYears.size === 1) {
+        setTimeout(closeSidePanel, 300);
+      }
+    });
+    list.appendChild(div);
+  });
+}
+
+function syncCohortUI() {
+  document.getElementById('cohort-all-btn').classList.toggle('active', !activeYears || activeYears.size === 0);
+  document.querySelectorAll('.cohort-item[data-year]').forEach(el => {
+    const y = parseInt(el.dataset.year);
+    el.classList.toggle('active', !!activeYears && activeYears.has(y));
+  });
+}
+
+// ─────────────────────────────────────────────
+// TIMELINE — click individual ticks to toggle years
+// ─────────────────────────────────────────────
+function buildYearTicks() {
+  const container = document.getElementById('year-ticks');
+  for (let y = 1; y <= 22; y++) {
+    const hasData = scholars.some(s => s.year === y);
+    const tick = document.createElement('div');
+    tick.className = 'tick';
+    tick.dataset.year = y;
+    tick.style.opacity = hasData ? '1' : '0.3';
+    tick.innerHTML = `<div class="tick-line"></div><div class="tick-year">${2003+y}</div>`;
+    if (hasData) {
+      tick.addEventListener('click', () => {
+        const yi = parseInt(tick.dataset.year);
+        if (!activeYears) activeYears = new Set();
+        if (activeYears.has(yi)) {
+          activeYears.delete(yi);
+          if (activeYears.size === 0) activeYears = null;
+        } else {
+          activeYears.add(yi);
+        }
+        syncCohortUI();
+        syncTimelineTicks();
+        renderMarkers();
+        updateYearDisplay();
+      });
+    }
+    container.appendChild(tick);
+  }
+}
+
+function syncTimelineTicks() {
+  document.querySelectorAll('.tick').forEach(t => {
+    const y = parseInt(t.dataset.year);
+    const isActive = !activeYears || activeYears.size === 0 || activeYears.has(y);
+    t.classList.toggle('active', !!activeYears && activeYears.has(y));
+  });
+}
+
+function updateYearDisplay() {
+  const el = document.getElementById('year-display');
+  if (!activeYears || activeYears.size === 0) {
+    el.textContent = 'All Years';
+  } else if (activeYears.size === 1) {
+    const y = [...activeYears][0];
+    el.textContent = `Year ${y} · ${2003+y}–${2004+y}`;
+  } else {
+    const sorted = [...activeYears].sort((a,b)=>a-b);
+    el.textContent = `Years ${sorted.join(', ')}`;
+  }
+}
+
+// ─────────────────────────────────────────────
+// MOBILE PANEL TOGGLE
+// ─────────────────────────────────────────────
+function toggleSidePanel() {
+  const panel = document.getElementById('side-panel');
+  const overlay = document.getElementById('overlay');
+  const fab = document.getElementById('fab-menu');
+  const isOpen = panel.classList.contains('open');
+  if (isOpen) {
+    panel.classList.remove('open');
+    overlay.classList.remove('visible');
+    fab.textContent = '☰';
+  } else {
+    closePopup();
+    panel.classList.add('open');
+    overlay.classList.add('visible');
+    fab.textContent = '✕';
+  }
+}
+
+function closeSidePanel() {
+  document.getElementById('side-panel').classList.remove('open');
+  document.getElementById('overlay').classList.remove('visible');
+  const fab = document.getElementById('fab-menu');
+  if (fab) fab.textContent = '☰';
+}
+
+function closePopup() {
+
+  const cp = document.getElementById('country-panel');
+  if (cp) cp.style.top = 'calc(var(--header-h) + 6px)';
+  document.getElementById('country-panel').style.top = '90px';
+  document.getElementById('country-panel').style.display = 'block';
+  const scholarPopup = document.getElementById('scholar-popup');
+  if (scholarPopup) scholarPopup.style.display = 'none';
+
+  const scholarPicker = document.getElementById('scholar-picker');
+  if (scholarPicker) scholarPicker.style.display = 'none';
+}
+function enterMap() {
+  const intro = document.getElementById('intro');
+  intro.classList.add('fade-out');
+  setTimeout(() => { intro.style.display = 'none'; }, 900);
+}
+
+// ─────────────────────────────────────────────
+// INIT — load data first, then build UI
+// ─────────────────────────────────────────────
+(async () => {
+  await loadScholars();
+  COHORT_YEARS = buildCohortYears();
+  buildYearTicks();
+  buildCohortList();
+  renderMarkers();
+  // loadCountries().then(() => { if (!geoLayer) drawFallbackHighlights(); });
+})();
+</script>
+</body>
+</html>
